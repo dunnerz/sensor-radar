@@ -3,3 +3,4 @@ uvicorn
 scipy
 numpy
 geopy
+rasterio
