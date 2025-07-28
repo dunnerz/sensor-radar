@@ -3,8 +3,8 @@ from scipy.io import loadmat
 from utils import haversine_distance, is_los_clear, fspl_db
 
 def compute_min_agl(sensor_id, lat, lon, height, config):
-    mat = loadmat("england-cells.mat")
-    cells = mat["cells"].squeeze()
+    mat = loadmat("england-cells.mat", struct_as_record=False, squeeze_me=True)
+    cells = mat["cells"]
 
     sensor_pos = np.array([lat, lon])
     sensor_height_asl = height
@@ -19,9 +19,9 @@ def compute_min_agl(sensor_id, lat, lon, height, config):
 
     results = []
     for cell in cells:
-        cell_lat = float(cell["latitude"])
-        cell_lon = float(cell["longitude"])
-        terrain_asl = float(cell["terrainHeight"])
+        cell_lat = float(cell.latitude)
+        cell_lon = float(cell.longitude)
+        terrain_asl = float(cell.height)
         dist_m = haversine_distance(lat, lon, cell_lat, cell_lon)
 
         if dist_m > max_range_m:
