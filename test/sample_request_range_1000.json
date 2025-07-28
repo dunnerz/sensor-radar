@@ -12,6 +12,6 @@
     "minHeight": 0,
     "maxHeight": 100,
     "heightRes": 20,
-    "maxRange": 1000
+    "maxRange": 30000
   }
 }

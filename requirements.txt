@@ -1,4 +1,4 @@
-Flask
-geopy
-numpy
+fastapi
+uvicorn
 scipy
+numpy
