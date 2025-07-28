@@ -65,11 +65,11 @@ async def run_coverage(data: CoverageRequest):
     """
     try:
         results = compute_min_agl(
-            sensor_id=data.sensor_id,
-            latitude=data.latitude,
-            longitude=data.longitude,
-            height=data.height,
-            config=data.config
+            data.sensor_id,
+            data.latitude,
+            data.longitude,
+            data.height,
+            data.config
         )
         return {
             "sensor_id": data.sensor_id,
