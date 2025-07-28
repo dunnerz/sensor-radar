@@ -1,63 +1,37 @@
-import math
-from scipy.io import loadmat
 from geopy.distance import geodesic
-from typing import List, Dict, Any
+from .terrain import get_elevation
 
-
-def mat_struct_to_dict(obj):
-    """Recursively convert MATLAB mat_struct to nested Python dicts."""
-    from scipy.io.matlab.mio5_params import mat_struct
-    if isinstance(obj, mat_struct):
-        result = {}
-        for field_name in obj._fieldnames:
-            result[field_name] = mat_struct_to_dict(getattr(obj, field_name))
-        return result
-    elif isinstance(obj, list):
-        return [mat_struct_to_dict(item) for item in obj]
-    else:
-        return obj
-
-
-def compute_min_agl(
-    sensor_id: str,
-    sensor_lat: float,
-    sensor_lon: float,
-    sensor_alt: float,
-    config: Dict[str, Any]
-) -> List[Dict[str, float]]:
-    # Load and process MATLAB cells
-    mat = loadmat("england-cells.mat", struct_as_record=False, squeeze_me=True)
-    raw_cells = mat["cells"]
-    cells = [mat_struct_to_dict(cell) for cell in raw_cells]
-
-    # Filter cells within range
-    def haversine(lat1, lon1, lat2, lon2):
-        return geodesic((lat1, lon1), (lat2, lon2)).meters
-
-    local_cells = [
-        cell for cell in cells
-        if haversine(sensor_lat, sensor_lon, cell["latitude"], cell["longitude"]) < config["maxRange"]
-    ]
-
+def compute_min_agl(sensor_id, lat, lon, alt, config, cells):
     results = []
-    for cell in local_cells:
-        terrain_asl = float(cell["height"])  # Altitude of the terrain
-        min_detectable_agl = None
-
-        for h in range(config["minHeight"], config["maxHeight"] + 1, config["heightRes"]):
+    sensor_pos = (lat, lon, alt)
+    for cell in cells:
+        cell_pos = (cell['latitude'], cell['longitude'])
+        distance_km = geodesic(sensor_pos[:2], cell_pos).km
+        if distance_km > config['maxRange']:
+            continue
+        terrain_asl = get_elevation(cell['latitude'], cell['longitude'])
+        if terrain_asl is None:
+            continue
+        for h in range(config['minHeight'], config['maxHeight'] + 1, config['heightRes']):
             aircraft_alt_asl = terrain_asl + h
-            slant_distance = haversine(sensor_lat, sensor_lon, cell["latitude"], cell["longitude"])
-            fspl = 20 * math.log10(slant_distance) + 20 * math.log10(config["txFrequency"]) - 147.55
-            rcv_power = config["txPower"] - fspl
-
-            if rcv_power >= config["rxSensitivity"]:
-                min_detectable_agl = h
+            signal_strength = simulate_signal_strength(sensor_pos, (cell['latitude'], cell['longitude'], aircraft_alt_asl), config)
+            if signal_strength > config['rxSensitivity']:
+                results.append({
+                    "lat": cell['latitude'],
+                    "lon": cell['longitude'],
+                    "agl": h
+                })
                 break
-
-        results.append({
-            "latitude": cell["latitude"],
-            "longitude": cell["longitude"],
-            "minDetectableAGL": min_detectable_agl if min_detectable_agl is not None else -1
-        })
-
     return results
+
+def simulate_signal_strength(sensor_pos, target_pos, config):
+    # Very simplified path loss approximation (Free space model)
+    from math import sqrt
+    dx = sensor_pos[0] - target_pos[0]
+    dy = sensor_pos[1] - target_pos[1]
+    dz = sensor_pos[2] - target_pos[2]
+    distance = sqrt(dx**2 + dy**2 + dz**2)
+    if distance == 0:
+        return config['txPower']
+    path_loss = 20 * log10(distance) + 20 * log10(config['txFrequency']) - 147.55
+    return config['txPower'] - path_loss

@@ -15,9 +15,9 @@ class SensorRequest(BaseModel):
 async def run_coverage(data: SensorRequest):
     results = compute_min_agl(
         sensor_id=data.sensor_id,
-        sensor_lat=data.latitude,
-        sensor_lon=data.longitude,
-        sensor_alt=data.height,
+        lat=data.latitude,
+        lon=data.longitude,
+        height=data.height,
         config=data.config
     )
     return {"results": results}

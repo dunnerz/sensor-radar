@@ -1,17 +1,15 @@
 {
-  "sensor_id": "test_sensor",
-  "sensor_position": [
-    51.5074,
-    -0.1278,
-    120
-  ],
+  "sensor_id": "TestRadar1",
+  "latitude": 52.0,
+  "longitude": -1.5,
+  "height": 5,
   "config": {
+    "rxSensitivity": -110,
     "txPower": 20,
-    "txFrequency": 1090000000,
-    "rxSensitivity": -79,
+    "txFrequency": 1090,
+    "maxRange": 1000,
     "minHeight": 0,
-    "maxHeight": 100,
-    "heightRes": 20,
-    "maxRange": 30000
+    "maxHeight": 200,
+    "heightRes": 20
   }
 }
