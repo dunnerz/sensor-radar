@@ -1,9 +1,15 @@
 from geopy.distance import geodesic
 from terrain import get_elevation
+import numpy as np
+from utils import fresnel_triangle_check, fresnel_zone_clearance
 
-def compute_min_agl(sensor_id, lat, lon, alt, config, cells):
+def compute_min_agl(sensor_id, lat, lon, alt, config):
     results = []
     sensor_pos = (lat, lon, alt)
+    
+    # Generate terrain cells around the sensor
+    cells = generate_terrain_cells(lat, lon, config['maxRange'])
+    
     for cell in cells:
         cell_pos = (cell['latitude'], cell['longitude'])
         distance_km = geodesic(sensor_pos[:2], cell_pos).km
@@ -14,24 +20,86 @@ def compute_min_agl(sensor_id, lat, lon, alt, config, cells):
             continue
         for h in range(config['minHeight'], config['maxHeight'] + 1, config['heightRes']):
             aircraft_alt_asl = terrain_asl + h
-            signal_strength = simulate_signal_strength(sensor_pos, (cell['latitude'], cell['longitude'], aircraft_alt_asl), config)
+            target_pos = (cell['latitude'], cell['longitude'], aircraft_alt_asl)
+            
+            # Check signal strength
+            signal_strength = simulate_signal_strength(sensor_pos, target_pos, config)
             if signal_strength > config['rxSensitivity']:
-                results.append({
-                    "lat": cell['latitude'],
-                    "lon": cell['longitude'],
-                    "agl": h
-                })
-                break
+                # Check Fresnel zone clearance for line-of-sight
+                frequency_hz = config['txFrequency'] * 1e6  # Convert MHz to Hz
+                # Use enhanced Fresnel zone checking for better accuracy
+                los_clear = fresnel_zone_clearance(sensor_pos, target_pos, get_elevation, frequency_hz, fresnel_zone=1)
+                
+                if los_clear:
+                    results.append({
+                        "lat": cell['latitude'],
+                        "lon": cell['longitude'],
+                        "agl": h
+                    })
+                    break
     return results
 
+def generate_terrain_cells(center_lat, center_lon, max_range_km):
+    """
+    Generate a grid of terrain cells around the sensor location.
+    
+    Args:
+        center_lat: Sensor latitude
+        center_lon: Sensor longitude  
+        max_range_km: Maximum range in kilometers
+        
+    Returns:
+        List of cell dictionaries with lat/lon coordinates
+    """
+    # Convert km to approximate degrees (rough approximation)
+    lat_deg_per_km = 1 / 111.32  # 1 degree latitude ≈ 111.32 km
+    lon_deg_per_km = 1 / (111.32 * np.cos(np.radians(center_lat)))
+    
+    # Calculate grid bounds
+    lat_range = max_range_km * lat_deg_per_km
+    lon_range = max_range_km * lon_deg_per_km
+    
+    # Create grid with 1km resolution
+    grid_resolution = 1  # km
+    lat_step = grid_resolution * lat_deg_per_km
+    lon_step = grid_resolution * lon_deg_per_km
+    
+    cells = []
+    for lat in np.arange(center_lat - lat_range, center_lat + lat_range + lat_step, lat_step):
+        for lon in np.arange(center_lon - lon_range, center_lon + lon_range + lon_step, lon_step):
+            cells.append({
+                'latitude': lat,
+                'longitude': lon
+            })
+    
+    return cells
+
 def simulate_signal_strength(sensor_pos, target_pos, config):
-    # Very simplified path loss approximation (Free space model)
-    from math import sqrt
-    dx = sensor_pos[0] - target_pos[0]
-    dy = sensor_pos[1] - target_pos[1]
-    dz = sensor_pos[2] - target_pos[2]
+    """
+    Calculate signal strength using free space path loss model.
+    
+    Args:
+        sensor_pos: (lat, lon, alt) of transmitter
+        target_pos: (lat, lon, alt) of receiver  
+        config: Configuration dictionary with txPower, txFrequency
+        
+    Returns:
+        Signal strength in dBm
+    """
+    from math import sqrt, log10, cos, radians
+    
+    # Calculate 3D distance in meters
+    dx = (sensor_pos[0] - target_pos[0]) * 111320  # Convert lat to meters
+    dy = (sensor_pos[1] - target_pos[1]) * 111320 * cos(radians(sensor_pos[0]))  # Convert lon to meters
+    dz = sensor_pos[2] - target_pos[2]  # Height difference in meters
+    
     distance = sqrt(dx**2 + dy**2 + dz**2)
     if distance == 0:
         return config['txPower']
-    path_loss = 20 * log10(distance) + 20 * log10(config['txFrequency']) - 147.55
+    
+    # Free space path loss: PL = 20*log10(d) + 20*log10(f) - 147.55
+    # where d is in meters and f is in MHz
+    frequency_mhz = config['txFrequency']  # Assuming frequency is in MHz
+    path_loss = 20 * log10(distance) + 20 * log10(frequency_mhz) - 147.55
+    
     return config['txPower'] - path_loss
