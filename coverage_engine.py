@@ -1,5 +1,5 @@
 from geopy.distance import geodesic
-from .terrain import get_elevation
+from terrain import get_elevation
 
 def compute_min_agl(sensor_id, lat, lon, alt, config, cells):
     results = []
