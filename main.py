@@ -1,26 +1,27 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from typing import List, Dict, Any
 from coverage_engine import compute_min_agl
 
 app = FastAPI()
 
-class SensorRequest(BaseModel):
+class CoverageRequest(BaseModel):
     sensor_id: str
     latitude: float
     longitude: float
-    height: float  # sensor antenna height above terrain
-    config: Dict[str, Any]
+    height: float
+    config: dict
 
 @app.post("/")
-async def run_coverage(data: SensorRequest):
+async def run_coverage(data: CoverageRequest):
     try:
         results = compute_min_agl(
             sensor_id=data.sensor_id,
-            sensor_position=[data.latitude, data.longitude, data.height],
+            latitude=data.latitude,
+            longitude=data.longitude,
+            height=data.height,
             config=data.config
         )
-        return {"results": results}
+        return results
     except Exception as e:
         return {"error": str(e)}

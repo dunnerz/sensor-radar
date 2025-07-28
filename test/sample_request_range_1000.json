@@ -1,7 +1,7 @@
 {
   "sensor_id": "TestRadar1",
-  "latitude": 52.0,
-  "longitude": -1.5,
+  "latitude": 51.493,
+  "longitude": -0.0669,
   "height": 5,
   "config": {
     "rxSensitivity": -110,
