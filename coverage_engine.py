@@ -2,6 +2,7 @@ from geopy.distance import geodesic
 from terrain import get_elevation
 import numpy as np
 from utils import fresnel_triangle_check, fresnel_zone_clearance
+import asyncio
 
 def compute_min_agl(sensor_id, lat, lon, alt, config):
     results = []
@@ -37,6 +38,70 @@ def compute_min_agl(sensor_id, lat, lon, alt, config):
                         "agl": h
                     })
                     break
+    return results
+
+async def compute_min_agl_with_progress(job_id, sensor_id, lat, lon, alt, config):
+    """
+    Compute minimum AGL with progress tracking.
+    
+    Args:
+        job_id: Job ID for progress tracking
+        sensor_id: Sensor identifier
+        lat: Sensor latitude
+        lon: Sensor longitude
+        alt: Sensor altitude
+        config: Configuration dictionary
+        
+    Returns:
+        List of coverage results
+    """
+    results = []
+    sensor_pos = (lat, lon, alt)
+    
+    # Generate terrain cells around the sensor
+    cells = generate_terrain_cells(lat, lon, config['maxRange'])
+    
+    # Update progress with total cells
+    from main import progress_store
+    progress_store[job_id]["total_cells"] = len(cells)
+    progress_store[job_id]["processed_cells"] = 0
+    
+    for i, cell in enumerate(cells):
+        cell_pos = (cell['latitude'], cell['longitude'])
+        distance_km = geodesic(sensor_pos[:2], cell_pos).km
+        if distance_km > config['maxRange']:
+            continue
+        terrain_asl = get_elevation(cell['latitude'], cell['longitude'])
+        if terrain_asl is None:
+            continue
+        for h in range(config['minHeight'], config['maxHeight'] + 1, config['heightRes']):
+            aircraft_alt_asl = terrain_asl + h
+            target_pos = (cell['latitude'], cell['longitude'], aircraft_alt_asl)
+            
+            # Check signal strength
+            signal_strength = simulate_signal_strength(sensor_pos, target_pos, config)
+            if signal_strength > config['rxSensitivity']:
+                # Check Fresnel zone clearance for line-of-sight
+                frequency_hz = config['txFrequency'] * 1e6  # Convert MHz to Hz
+                # Use enhanced Fresnel zone checking for better accuracy
+                los_clear = fresnel_zone_clearance(sensor_pos, target_pos, get_elevation, frequency_hz, fresnel_zone=1)
+                
+                if los_clear:
+                    results.append({
+                        "lat": cell['latitude'],
+                        "lon": cell['longitude'],
+                        "agl": h
+                    })
+                    break
+        
+        # Update progress every 10 cells or at the end
+        if i % 10 == 0 or i == len(cells) - 1:
+            progress = min(100, int((i + 1) / len(cells) * 100))
+            progress_store[job_id]["progress"] = progress
+            progress_store[job_id]["processed_cells"] = i + 1
+            # Allow other tasks to run
+            await asyncio.sleep(0.001)
+    
     return results
 
 def generate_terrain_cells(center_lat, center_lon, max_range_km):
