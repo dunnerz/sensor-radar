@@ -1,0 +1,17 @@
+{
+  "sensor_id": "test_sensor",
+  "sensor_position": [
+    51.5074,
+    -0.1278,
+    120
+  ],
+  "config": {
+    "txPower": 20,
+    "txFrequency": 1090000000,
+    "rxSensitivity": -79,
+    "minHeight": 0,
+    "maxHeight": 100,
+    "heightRes": 20,
+    "maxRange": 1000
+  }
+}
