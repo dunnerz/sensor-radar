@@ -1,110 +1,148 @@
 import numpy as np
+from functools import lru_cache
 
-def fresnel_triangle_check(p1, p2, terrain_sampler, frequency_hz):
+# OPTIMIZATION: Simple terrain cache for frequently accessed coordinates
+_terrain_cache = {}
+
+def cached_terrain_sampler(lat, lon, terrain_sampler):
+    """Cached terrain sampler to avoid redundant lookups."""
+    # Round coordinates to reduce cache size
+    lat_rounded = round(lat, 6)
+    lon_rounded = round(lon, 6)
+    cache_key = (lat_rounded, lon_rounded)
+    
+    if cache_key not in _terrain_cache:
+        _terrain_cache[cache_key] = terrain_sampler(lat, lon)
+    
+    return _terrain_cache[cache_key]
+
+def clear_terrain_cache():
+    """Clear the terrain cache."""
+    global _terrain_cache
+    _terrain_cache.clear()
+
+@lru_cache(maxsize=10000)
+def haversine_m(lat1, lon1, lat2, lon2):
+    """Calculate haversine distance between two points in meters."""
+    R = 6371000
+    phi1, phi2 = np.radians(lat1), np.radians(lat2)
+    dphi = phi2 - phi1
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
+    return 2 * R * np.arcsin(np.sqrt(a))
+
+def fresnel_radius(frequency_hz, d1_m, d2_m):
+    """Calculate Fresnel zone radius."""
+    # OPTIMIZATION: Cache constants
+    c = 3e8  # speed of light in m/s
+    wavelength = c / frequency_hz
+    
+    # Handle division by zero or very small numbers
+    if d1_m + d2_m < 1e-6:
+        return 0.0
+    
+    # OPTIMIZATION: Use more efficient calculation
+    return ((wavelength * d1_m * d2_m) / (d1_m + d2_m)) ** 0.5
+
+def true_fresnel_check(p1, p2, terrain_sampler, frequency_hz, fresnel_samples=7, debug=False):
     """
-    Check if terrain obstructs the first Fresnel zone using a triangular approximation.
-
+    Optimized true Fresnel zone calculation with early termination.
+    
     Parameters:
     - p1, p2: tuples (lat, lon, alt) for transmitter and receiver
     - terrain_sampler: function accepting (lat, lon) and returning terrain height in meters
-    - frequency_hz: frequency in Hz (e.g., 9.1e9 for 9.1 GHz)
-
+    - frequency_hz: frequency in Hz
+    - fresnel_samples: number of sampling points along the Fresnel zone (default: 7)
+    - debug: if True, print detailed calculation steps
+    
     Returns:
     - bool: True if LOS is clear, False if obstructed
     """
     lat1, lon1, alt1 = p1
     lat2, lon2, alt2 = p2
 
-    def haversine_m(lat1, lon1, lat2, lon2):
-        R = 6371000
-        phi1, phi2 = np.radians(lat1), np.radians(lat2)
-        dphi = phi2 - phi1
-        dlambda = np.radians(lon2 - lon1)
-        a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
-        return 2 * R * np.arcsin(np.sqrt(a))
-
-    d = haversine_m(lat1, lon1, lat2, lon2)
-
-    c = 3e8
-    r_fresnel = np.sqrt(c * d / (2 * frequency_hz))
-
-    lat_mid = (lat1 + lat2) / 2
-    lon_mid = (lon1 + lon2) / 2
-    alt_mid = (alt1 + alt2) / 2 - r_fresnel
-
-    C = (lat_mid, lon_mid, alt_mid)
-
-    # Dynamic sampling based on distance - more samples for longer distances
-    base_samples = 6
-    distance_factor = min(d / 1000, 5)  # Scale up to 5x for distances > 1km
-    N = max(base_samples, int(base_samples * distance_factor))
-    
-    def check_segment(p_start, p_end):
-        lats = np.linspace(p_start[0], p_end[0], N)
-        lons = np.linspace(p_start[1], p_end[1], N)
-        alts = np.linspace(p_start[2], p_end[2], N)
-        for lat, lon, alt in zip(lats, lons, alts):
-            terrain_alt = terrain_sampler(lat, lon)
-            if terrain_alt is not None and terrain_alt > alt:
-                return False
-        return True
-
-    return check_segment(p1, C) and check_segment(C, p2)
-
-def fresnel_zone_clearance(p1, p2, terrain_sampler, frequency_hz, fresnel_zone=1):
-    """
-    Enhanced Fresnel zone clearance check with configurable zone number.
-    
-    Parameters:
-    - p1, p2: tuples (lat, lon, alt) for transmitter and receiver
-    - terrain_sampler: function accepting (lat, lon) and returning terrain height in meters
-    - frequency_hz: frequency in Hz
-    - fresnel_zone: which Fresnel zone to check (1 for first zone, 2 for second, etc.)
-    
-    Returns:
-    - bool: True if the specified Fresnel zone is clear, False if obstructed
-    """
-    lat1, lon1, alt1 = p1
-    lat2, lon2, alt2 = p2
-
-    def haversine_m(lat1, lon1, lat2, lon2):
-        R = 6371000
-        phi1, phi2 = np.radians(lat1), np.radians(lat2)
-        dphi = phi2 - phi1
-        dlambda = np.radians(lon2 - lon1)
-        a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
-        return 2 * R * np.arcsin(np.sqrt(a))
-
+    # OPTIMIZATION: Calculate distance once and cache it
     d = haversine_m(lat1, lon1, lat2, lon2)
     
     if d == 0:
         return True
 
+    # OPTIMIZATION: Pre-calculate constants
     c = 3e8
-    # Fresnel zone radius: r = sqrt(n * λ * d1 * d2 / (d1 + d2))
-    # For first zone (n=1): r = sqrt(λ * d / 2)
-    r_fresnel = np.sqrt(fresnel_zone * c * d / (2 * frequency_hz))
-
-    # Dynamic sampling based on distance and Fresnel zone
-    base_samples = 8
-    distance_factor = min(d / 500, 8)  # More aggressive scaling
-    zone_factor = np.sqrt(fresnel_zone)  # More samples for higher zones
-    N = max(base_samples, int(base_samples * distance_factor * zone_factor))
+    wavelength = c / frequency_hz
+    clearance_factor = 0.6
     
-    # Check multiple points along the path with Fresnel zone clearance
-    lats = np.linspace(lat1, lat2, N)
-    lons = np.linspace(lon1, lon2, N)
-    alts = np.linspace(alt1, alt2, N)
+    if debug:
+        print(f"\n🔍 FRESNEL CALCULATION DEBUG:")
+        print(f"   Sensor: ({lat1:.6f}, {lon1:.6f}, {alt1}m)")
+        print(f"   Aircraft: ({lat2:.6f}, {lon2:.6f}, {alt2}m)")
+        print(f"   Distance: {d:.1f}m")
+        print(f"   Wavelength: {wavelength:.6f}m")
+        print(f"   Clearance factor: {clearance_factor}")
     
-    for i, (lat, lon, alt) in enumerate(zip(lats, lons, alts)):
-        # Calculate Fresnel zone clearance at this point
-        # The clearance needed decreases as we approach the endpoints
-        progress = i / (N - 1) if N > 1 else 0.5
-        clearance_factor = 4 * progress * (1 - progress)  # Parabolic shape
-        required_clearance = r_fresnel * clearance_factor
+    # OPTIMIZATION: Pre-calculate interpolation factors
+    num_samples = fresnel_samples
+    if num_samples == 1:
+        t_values = [0.5]
+    elif num_samples == 2:
+        # For 2 samples, use the middle point only
+        t_values = [0.5]
+    else:
+        # Sample from index 2 to n-1 (exclude start and end points where Fresnel radius = 0)
+        # This means t values from 1/(n-1) to (n-2)/(n-1)
+        t_values = [i / (num_samples - 1) for i in range(1, num_samples - 1)]
+    
+    # OPTIMIZATION: Pre-calculate lat/lon differences
+    lat_diff = lat2 - lat1
+    lon_diff = lon2 - lon1
+    alt_diff = alt2 - alt1
+    
+    if debug:
+        print(f"   Sampling points: {len(t_values)}")
+        print(f"   T values: {[f'{t:.3f}' for t in t_values]}")
+    
+    # Check each sample point directly (no line segments for speed)
+    for i, t in enumerate(t_values):
+        # OPTIMIZATION: Use pre-calculated differences for interpolation
+        lat = lat1 + t * lat_diff
+        lon = lon1 + t * lon_diff
+        alt = alt1 + t * alt_diff
         
-        terrain_alt = terrain_sampler(lat, lon)
-        if terrain_alt is not None and terrain_alt > (alt - required_clearance):
+        # OPTIMIZATION: Calculate distances more efficiently
+        d1 = t * d
+        d2 = d - d1  # OPTIMIZATION: Avoid multiplication
+        
+        # OPTIMIZATION: Avoid division by zero check since d1 + d2 = d > 0
+        r_fresnel = ((wavelength * d1 * d2) / d) ** 0.5
+        
+        # OPTIMIZATION: Combine clearance calculation
+        clearance_height = alt - (clearance_factor * r_fresnel)
+        
+        # Check terrain at this point (early termination)
+        terrain_height = cached_terrain_sampler(lat, lon, terrain_sampler)
+        if terrain_height is None:
+            # DEBUG: Log when terrain sampling fails
+            print(f"⚠️ Terrain sampling failed for lat={lat:.6f}, lon={lon:.6f}")
+            continue  # Skip this point if terrain data is unavailable
+        
+        if debug:
+            print(f"\n   Sample {i+1}/{len(t_values)} (t={t:.3f}):")
+            print(f"     Position: ({lat:.6f}, {lon:.6f}, {alt:.1f}m)")
+            print(f"     Distances: d1={d1:.1f}m, d2={d2:.1f}m")
+            print(f"     Fresnel radius: {r_fresnel:.3f}m")
+            print(f"     Clearance height: {clearance_height:.1f}m")
+            print(f"     Terrain height: {terrain_height:.1f}m")
+            print(f"     Clearance margin: {clearance_height - terrain_height:.1f}m")
+        
+        if terrain_height > clearance_height:
+            if debug:
+                print(f"     ❌ OBSTRUCTED: Terrain ({terrain_height:.1f}m) > Clearance ({clearance_height:.1f}m)")
             return False
+        elif debug:
+            print(f"     ✅ CLEAR: Terrain ({terrain_height:.1f}m) < Clearance ({clearance_height:.1f}m)")
     
+    if debug:
+        print(f"   ✅ ALL SAMPLES CLEAR - LOS is unobstructed")
     return True
+
+

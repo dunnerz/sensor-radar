@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Start the FastAPI server with progress tracking enabled.
 """
@@ -16,6 +15,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=False,  # Disable auto-reload to preserve terrain cache
         log_level="info"
     ) 
