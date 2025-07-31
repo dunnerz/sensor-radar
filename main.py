@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import asyncio
 import os
 from coverage_engine import compute_min_agl_with_progress, compute_min_agl_parallel, get_distance_stats
-from terrain import get_cache_stats
+from terrain import get_cache_stats, validate_terrain_data
 from progress_store import set_progress, get_progress, remove_progress, get_active_jobs_count
 
 app = FastAPI(
@@ -13,6 +13,24 @@ app = FastAPI(
     description="API for computing minimum AGL heights for sensor coverage",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Validate terrain data on startup."""
+    print("🚀 Starting Sensor Coverage API...")
+    print("🔍 Validating terrain data...")
+    
+    try:
+        # Validate terrain data
+        if validate_terrain_data():
+            print("✅ Terrain data validation successful")
+        else:
+            print("⚠️ Terrain data validation failed - some features may not work")
+    except Exception as e:
+        print(f"❌ Terrain validation error: {str(e)}")
+        print("⚠️ API will start but terrain-dependent features may fail")
+    
+    print("🚀 API startup complete")
 
 # Add CORS middleware
 app.add_middleware(
@@ -238,6 +256,42 @@ async def root():
 async def health_check():
     """Health check endpoint for Render."""
     return {"status": "healthy"}
+
+@app.get("/debug/terrain")
+async def debug_terrain():
+    """Debug endpoint to check terrain data status."""
+    try:
+        from terrain import validate_terrain_data, get_cache_stats
+        import os
+        
+        # Check if terrain file exists
+        terrain_file = "london-terrain-test.tif"
+        file_exists = os.path.exists(terrain_file)
+        file_size = os.path.getsize(terrain_file) if file_exists else 0
+        
+        # Validate terrain data
+        terrain_valid = validate_terrain_data()
+        
+        # Get cache stats
+        cache_stats = get_cache_stats()
+        
+        return {
+            "terrain_file": {
+                "exists": file_exists,
+                "size_bytes": file_size,
+                "size_mb": round(file_size / (1024 * 1024), 2) if file_exists else 0
+            },
+            "terrain_validation": terrain_valid,
+            "cache_stats": cache_stats,
+            "working_directory": os.getcwd(),
+            "files_in_directory": [f for f in os.listdir(".") if f.endswith(".tif")]
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "working_directory": os.getcwd(),
+            "files_in_directory": [f for f in os.listdir(".") if f.endswith(".tif")]
+        }
 
 if __name__ == "__main__":
     import uvicorn

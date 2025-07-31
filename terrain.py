@@ -131,10 +131,34 @@ def load_terrain_model():
     if _raster is None:
         with _lock:
             if _raster is None:
-                try:
-                    _raster = rasterio.open("london-terrain-test.tif")
-                except Exception as e:
-                    raise RuntimeError(f"Failed to load terrain data: {str(e)}")
+                # Try multiple possible paths for the terrain file
+                possible_paths = [
+                    "london-terrain-test.tif",
+                    "/app/london-terrain-test.tif",
+                    "./london-terrain-test.tif",
+                    os.path.join(os.getcwd(), "london-terrain-test.tif")
+                ]
+                
+                for path in possible_paths:
+                    try:
+                        print(f"🔍 Trying to load terrain from: {path}")
+                        if os.path.exists(path):
+                            print(f"✅ File exists at: {path}")
+                            _raster = rasterio.open(path)
+                            print(f"✅ Successfully opened terrain file: {path}")
+                            break
+                        else:
+                            print(f"❌ File not found at: {path}")
+                    except Exception as e:
+                        print(f"❌ Failed to load from {path}: {str(e)}")
+                        continue
+                else:
+                    # If we get here, none of the paths worked
+                    error_msg = f"Failed to load terrain data: 'london-terrain-test.tif' not found in any of the expected locations. Tried: {possible_paths}"
+                    print(f"❌ {error_msg}")
+                    print(f"🔍 Current working directory: {os.getcwd()}")
+                    print(f"🔍 Files in current directory: {[f for f in os.listdir('.') if f.endswith('.tif')]}")
+                    raise RuntimeError(error_msg)
     return _raster
 
 async def preload_elevation_cache(center_lat, center_lon, max_range_km, progress_callback=None, max_cells=None):

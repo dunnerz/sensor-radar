@@ -9,4 +9,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.0
     healthCheckPath: /
-    autoDeploy: true 
+    autoDeploy: true
+    # Add build timeout for large terrain file
+    buildTimeout: 1800 
