@@ -2,12 +2,12 @@ import requests
 import json
 import time
 
-with open("sample_request_range_1000.json") as f:
+with open("test/sample_request_range_1000.json") as f:
     payload = json.load(f)
 
-# Use local server for testing progress
-print("🚀 Starting coverage computation...")
-res = requests.post("http://localhost:8000/", json=payload)
+# Use Render server for testing progress
+print("🚀 Starting coverage computation on Render...")
+res = requests.post("https://sensor-radar.onrender.com/", json=payload)
 
 print("Status Code:", res.status_code)
 print("Initial Response:", res.json())
@@ -21,7 +21,7 @@ if res.status_code == 200:
         
         # Monitor progress
         while True:
-            progress_res = requests.get(f"http://localhost:8000/progress/{job_id}")
+            progress_res = requests.get(f"https://sensor-radar.onrender.com/progress/{job_id}")
             
             if progress_res.status_code == 200:
                 progress_data = progress_res.json()
