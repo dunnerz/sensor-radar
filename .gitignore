@@ -56,8 +56,10 @@ Thumbs.db
 # Exports and generated files
 exports/
 *.geotiff
-*.tif
-*.tiff
+
+# Allow terrain files (needed for API)
+# *.tif
+# *.tiff
 
 # Logs
 *.log
