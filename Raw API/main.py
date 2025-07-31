@@ -234,6 +234,11 @@ async def root():
         }
     }
 
+@app.head("/")
+async def health_check():
+    """Health check endpoint for Render."""
+    return {"status": "healthy"}
+
 if __name__ == "__main__":
     import uvicorn
     import os
