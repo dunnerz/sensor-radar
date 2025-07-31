@@ -32,14 +32,17 @@ A backend Python API for computing 3D coverage data for RF receiver antennas bas
 ## 📖 Documentation
 
 For complete API documentation and integration examples, see:
-- **[API Documentation](API_DOCUMENTATION.md)** - Comprehensive integration guide
-- **[Raw API Documentation](README_RAW_API.md)** - Technical implementation details
+- **[API Documentation](API_DOCUMENTATION.md)** - Comprehensive integration guide with code examples
 
 ## 🧪 Testing
 
-Run the test script to verify API functionality:
+Run the test scripts to verify API functionality:
 
 ```bash
+# Test terrain loading
+python test_terrain_loading.py
+
+# Test API functionality
 python test/api_test.py
 ```
 
@@ -64,6 +67,14 @@ python start_server.py
 - `GET /performance/clear-cache` - Clear system caches
 - `GET /debug/terrain` - Terrain data status
 - `GET /docs` - Interactive API documentation
+
+## 🔧 API Characteristics
+
+- **Simple Authentication** - No API keys required, open access to all endpoints
+- **No External Dependencies** - No database or external service integrations
+- **RESTful Design** - Clean HTTP endpoints with JSON request/response
+- **Real-time Progress** - Live job progress monitoring
+- **Performance Monitoring** - Built-in statistics and cache management
 
 ## 📈 Performance
 
