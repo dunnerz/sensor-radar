@@ -1,5 +1,11 @@
 # Sensor Coverage API
 
+[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-green.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![API Status](https://img.shields.io/badge/API-Live-green.svg)](https://sensor-radar.onrender.com)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/dunnerz/sensor-radar)
+
 A backend Python API for computing 3D coverage data for RF receiver antennas based on real terrain data. The API calculates minimum AGL (Above Ground Level) heights at which aircraft can be detected by sensors, taking into account terrain elevation and signal propagation.
 
 ## 🚀 Live API
