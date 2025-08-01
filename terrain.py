@@ -441,13 +441,8 @@ def get_elevation(lat, lon):
         # Transform lat/lon to raster coordinates
         x, y = transformer.transform(lon, lat)
         
-        # Get raster bounds for validation
+        # Get raster bounds for validation (but don't use for filtering since coordinates are in different systems)
         bounds = get_raster_bounds()
-        if bounds:
-            # Check if transformed coordinates are within raster bounds
-            if (x < bounds['left'] or x > bounds['right'] or 
-                y < bounds['bottom'] or y > bounds['top']):
-                return None
         
         row, col = rowcol(raster.transform, x, y)
         

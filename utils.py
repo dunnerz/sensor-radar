@@ -121,7 +121,7 @@ def true_fresnel_check(p1, p2, terrain_sampler, frequency_hz, fresnel_samples=7,
         # Check terrain at this point (early termination)
         terrain_height = cached_terrain_sampler(lat, lon, terrain_sampler)
         if terrain_height is None:
-            # DEBUG: Log when terrain sampling fails
+            # DEBUG: Log when terrain sampling failed
             print(f"⚠️ Terrain sampling failed for lat={lat:.6f}, lon={lon:.6f}")
             continue  # Skip this point if terrain data is unavailable
         

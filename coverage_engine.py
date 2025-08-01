@@ -78,25 +78,25 @@ def calculate_max_signal_range(config):
     Uses free space path loss model.
     
     Args:
-        config: Configuration dictionary with txPower, rxSensitivity, txFrequency
+        config: Configuration dictionary with txPower (W), rxSensitivity (dBm), txFrequency (MHz)
         
     Returns:
         Maximum range in meters where signal can be received
     """
-    tx_power = config['txPower']  # dBm
+    tx_power_w = config['txPower']  # Watts
     rx_sensitivity = config['rxSensitivity']  # dBm
     frequency_mhz = config['txFrequency']  # MHz
     
-    # Convert to linear scale
-    tx_power_linear = 10**(tx_power/10)  # mW
-    rx_sensitivity_linear = 10**(rx_sensitivity/10)  # mW
+    # Convert txPower from Watts to dBm
+    # 1W = 1000mW, so 10*log10(1000) = 30dBm
+    tx_power_dbm = 10 * np.log10(tx_power_w * 1000)
     
     # Free space path loss: PL = 20*log10(d) + 20*log10(f) - 147.55
     # where d is in meters and f is in MHz
     # Rearranging: d = 10^((PL - 20*log10(f) + 147.55)/20)
     
     # Calculate path loss
-    path_loss_db = tx_power - rx_sensitivity
+    path_loss_db = tx_power_dbm - rx_sensitivity
     
     # Calculate maximum range
     max_range_m = 10**((path_loss_db - 20*np.log10(frequency_mhz) + 147.55)/20)
@@ -414,9 +414,8 @@ async def compute_min_agl_parallel(job_id, sensor_id, lat, lon, alt, config, max
     max_signal_range_m = calculate_max_signal_range(config)
     print(f"   • Max signal range: {max_signal_range_m/1000:.1f}km")
     
-    from terrain import load_terrain_model, get_coordinate_transformer
+    from terrain import load_terrain_model
     raster = load_terrain_model()
-    transformer = get_coordinate_transformer()
     print("DEBUG: Terrain loaded, starting elevation caching...")
     
     # Add a small delay to make the "Loading terrain..." message visible
@@ -806,14 +805,17 @@ def simulate_signal_strength(sensor_pos, target_pos, config):
     Args:
         sensor_pos: (lat, lon, alt) of transmitter
         target_pos: (lat, lon, alt) of receiver
-        config: Configuration dictionary
+        config: Configuration dictionary with txPower (W)
         
     Returns:
         Signal strength in dBm
     """
     # OPTIMIZATION: Pre-calculate constants
-    tx_power = config['txPower']  # dBm
+    tx_power_w = config['txPower']  # Watts
     frequency_mhz = config['txFrequency']  # MHz
+    
+    # Convert txPower from Watts to dBm
+    tx_power_dbm = 10 * np.log10(tx_power_w * 1000)
     
     # OPTIMIZATION: Calculate distance once using cached function
     lat1, lon1, alt1 = sensor_pos
@@ -832,6 +834,6 @@ def simulate_signal_strength(sensor_pos, target_pos, config):
     path_loss = 20 * np.log10(distance_m) + 20 * np.log10(frequency_mhz) - 147.55
     
     # OPTIMIZATION: Combine calculations
-    signal_strength_dbm = tx_power - path_loss
+    signal_strength_dbm = tx_power_dbm - path_loss
     
     return signal_strength_dbm
