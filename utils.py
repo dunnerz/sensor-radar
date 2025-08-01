@@ -106,7 +106,32 @@ def true_fresnel_check(p1, p2, terrain_sampler, frequency_hz, fresnel_samples=7,
         # OPTIMIZATION: Use pre-calculated differences for interpolation
         lat = lat1 + t * lat_diff
         lon = lon1 + t * lon_diff
-        alt = alt1 + t * alt_diff
+        
+        # FIXED: Calculate absolute altitudes for proper interpolation
+        # Get terrain heights at sensor and aircraft positions
+        sensor_terrain = cached_terrain_sampler(lat1, lon1, terrain_sampler)
+        aircraft_terrain = cached_terrain_sampler(lat2, lon2, terrain_sampler)
+        
+        if sensor_terrain is None or aircraft_terrain is None:
+            print(f"⚠️ Terrain sampling failed for sensor or aircraft position")
+            continue
+        
+        # Calculate absolute altitudes
+        sensor_absolute = sensor_terrain + alt1
+        aircraft_absolute = aircraft_terrain + alt2
+        
+        # Interpolate between absolute altitudes (FIXED)
+        path_absolute = sensor_absolute + t * (aircraft_absolute - sensor_absolute)
+        
+        # Get terrain at this sample point
+        terrain_height = cached_terrain_sampler(lat, lon, terrain_sampler)
+        if terrain_height is None:
+            # DEBUG: Log when terrain sampling failed
+            print(f"⚠️ Terrain sampling failed for lat={lat:.6f}, lon={lon:.6f}")
+            continue  # Skip this point if terrain data is unavailable
+        
+        # Calculate path AGL at this point
+        path_agl = path_absolute - terrain_height
         
         # OPTIMIZATION: Calculate distances more efficiently
         d1 = t * d
@@ -115,31 +140,29 @@ def true_fresnel_check(p1, p2, terrain_sampler, frequency_hz, fresnel_samples=7,
         # OPTIMIZATION: Avoid division by zero check since d1 + d2 = d > 0
         r_fresnel = ((wavelength * d1 * d2) / d) ** 0.5
         
-        # OPTIMIZATION: Combine clearance calculation
-        clearance_height = alt - (clearance_factor * r_fresnel)
-        
-        # Check terrain at this point (early termination)
-        terrain_height = cached_terrain_sampler(lat, lon, terrain_sampler)
-        if terrain_height is None:
-            # DEBUG: Log when terrain sampling failed
-            print(f"⚠️ Terrain sampling failed for lat={lat:.6f}, lon={lon:.6f}")
-            continue  # Skip this point if terrain data is unavailable
+        # FIXED: Calculate minimum altitude needed (terrain + clearance)
+        clearance_required = clearance_factor * r_fresnel
+        min_altitude_needed = terrain_height + clearance_required
         
         if debug:
             print(f"\n   Sample {i+1}/{len(t_values)} (t={t:.3f}):")
-            print(f"     Position: ({lat:.6f}, {lon:.6f}, {alt:.1f}m)")
+            print(f"     Position: ({lat:.6f}, {lon:.6f})")
+            print(f"     Path absolute: {path_absolute:.1f}m")
+            print(f"     Path AGL: {path_agl:.1f}m")
             print(f"     Distances: d1={d1:.1f}m, d2={d2:.1f}m")
             print(f"     Fresnel radius: {r_fresnel:.3f}m")
-            print(f"     Clearance height: {clearance_height:.1f}m")
+            print(f"     Clearance required: {clearance_required:.3f}m")
             print(f"     Terrain height: {terrain_height:.1f}m")
-            print(f"     Clearance margin: {clearance_height - terrain_height:.1f}m")
+            print(f"     Min altitude needed: {min_altitude_needed:.1f}m")
+            print(f"     Margin: {path_absolute - min_altitude_needed:.1f}m")
         
-        if terrain_height > clearance_height:
+        # FIXED: Check if path altitude is above minimum required altitude
+        if path_absolute < min_altitude_needed:
             if debug:
-                print(f"     ❌ OBSTRUCTED: Terrain ({terrain_height:.1f}m) > Clearance ({clearance_height:.1f}m)")
+                print(f"     ❌ OBSTRUCTED: Path ({path_absolute:.1f}m) < Min required ({min_altitude_needed:.1f}m)")
             return False
         elif debug:
-            print(f"     ✅ CLEAR: Terrain ({terrain_height:.1f}m) < Clearance ({clearance_height:.1f}m)")
+            print(f"     ✅ CLEAR: Path ({path_absolute:.1f}m) >= Min required ({min_altitude_needed:.1f}m)")
     
     if debug:
         print(f"   ✅ ALL SAMPLES CLEAR - LOS is unobstructed")
